@@ -1,0 +1,2015 @@
+//final submitted code
+#include <string>
+#include <vector>
+#include <fstream>
+#include <cctype>
+#include <set>
+#include <map>
+#include <iostream>
+#include <sstream>
+#include <algorithm>
+#include <unordered_map>
+#include <ctime>
+
+//TO DO!!!
+//FACTORING
+using namespace std;
+
+struct Index {
+	int start;
+	int end;
+};
+
+struct InputParameter {
+	string name; //what is the name of the input parameter
+	char type; //c for constant and v for variable
+};
+
+struct Predicate {
+	string name; //what is the name of the predicate
+	vector<InputParameter> parameters; //what are it's input parameters
+	bool state; //is it in true or false state
+	int s_no; //which sentence this predicate appears in
+};
+
+int global_sno = -1;
+//this is a global index to store current predicate in a map
+//so by using this, every predicate will have a unique number in the map
+int index = 0;
+//this is global index for storing different things that are ANDed together in a syntax
+//this will be use as key in and_map
+int and_index = 0;
+//this is a global variable number for newly created variables
+int var_no = 0;
+//this is the global index for and or map
+int and_or_index = 0;
+//this is the standard name of the new variable. We will append var_no with it at the end
+string var_name = "x";
+
+//this map will contain clauses that have been ANDed together
+//each clause will contain ORs in it
+multimap<int, vector<int>> and_or_map;
+//this will store all the predicates in all the sentences
+//key will give a unique number to each of the predicates
+//index variable will be key here
+map<int, Predicate> predicate_map;
+//this map will store which predicates are ORed with other predicates in a particular sentence
+//key will be sentence number and value will be ids of the ORed predicates
+multimap<int, vector<int>> or_map;
+
+//this map will store which predicates are ANDed with other predicates in a particular sentence
+//key will be unique number determined by global and_index and value will be ids of the ANDed predicates
+multimap<int, vector<int>> and_map;
+//need to make sure that variables in different sentences are different
+//create a set of variables used so far
+//can create variables like var1, var2, var3 and so on
+
+//this function will split the implication sentence into premise and consequence
+void parseImplication(string str, string& premise, string& consequence);
+//this function will extract the portion from the substring which is to be NOT
+void parseNOT(string str, string& clause);
+//this function will split the AND sentence into left and right operand
+void parseAND(string str, string& left, string& right);
+//this function will split the OR sentence into left and right operand
+void parseOR(string str, string& left, string& right);
+//this function will extract the portion which is after the @ symbol
+void parseDummyAND(string str, string& clause);
+//this function will extract the portion which is after the # symbol
+void parseDummyHash(string str, string& clause);
+//this function will extract the portion which is after the ^ symbol
+void parseDummyOR(string str, string& clause);
+//this function checks whether the non-simple clause has ANDs in it
+bool hasANDEDclauses(string str);
+//this function checks whether the non-simple clause has ORs in it
+bool hasOREDclauses(string str);
+//this function checks whether the non-simple clause has hash in it
+bool hasHASHEDclauses(string str);
+//this function will take the NOT of all the ANDs in the premise
+vector<int> simplifyANDEDClause(string premise);
+
+//solve the scenario when there is OR operator in the expression
+string handleORCase(string substr, int s_no);
+//handle the case when we have AND operator in the expression
+string handleANDCase(string substr, int s_no, string & sentence);
+
+//this function will extract the key from the premise and then return it to the user
+int getANDMapKey(string str);
+//this function will return the IDs of the ANDED clauses
+vector<int> getANDEDClause(string id);
+void findInnerMostBrackets(string str, Index&);
+void tokenize(string str, string delim, vector<string>& tokens);
+//this function checks whether the () brackets contains an operator inside or not
+bool checkIfContainsOperator(string substr);
+//this function will tell us whether we need to simplify the premise further or not
+bool checkSimplified(string premise);
+//this function will take the NOT of the premise of the implication
+void takeNOT(string str);
+//this function will take 1 sentence as input and will parse it and then store the parsed
+//components in the global map of cnf_sentences
+//the second parameter is sentence number
+bool parseSentence(string& sentence);
+//this function will find the name and type of input parameters for a predicate
+//and store them in a vector of parameters
+void findInputParameters(string substr, vector<InputParameter>& parameters);
+//given a sentence and position of the opening bracket of predicate input parameters
+//this function will return the name of the predicate by looking backwards
+string findPredicateName(string sentence,int index_start, int& predicate_start_location);
+
+//this function will insert the predicate in it's correct location in the map
+//return the index on which the predicate is inserted in the map
+int insertPredicateintoMaps(Predicate p);
+//this function will put the NOT clause in the OR Map
+void putSinglePredicateInOrMap(string clause, int s_no);
+//this will handle the case when we have ORed clause in left and 
+//simple clause in right of ANDed sentence
+void putTwoANDClausesInORMap(string clause, string right);
+//this function will put the ORed predicates in the OR map corresponding to a particular sentence
+void putInORMap(string premise,string consequence,int s_no);
+//this function will handle the case when there is only 1 predicate in the whole sentence
+void handleOnlyPredicateCase(int map_key, int s_no);
+//this function will combine the ORed premises with consequense using OR operator
+//and then put the whole ORed predicates in the OR map corresponding to a particular sentence
+void putComplexSentenceInORMap(vector<int> clauses,string consequence,int s_no);
+//this function will store ORed clause in it's right place in the OR map
+void putClauseInORMap(vector<int> clause, int s_no);
+//this function will split the and clauses and store them in OR map
+void putANDClauseInORMap(vector<int> and_clauses);
+//this function will ge the ANDED clauses from AND OR Map and put them in the OR map
+void putANDEDClausesInORMap(string and_index);
+//this function will store ANDed predicate in it's right place in the AND map
+void putClauseInANDMap(string clause, int s_no);
+//this function will put the ANDed predicates in the AND map corresponding to a particular sentence
+void putInANDMap(string left,string right/*,int s_no*/);
+//this code will handle the insertions in AND_OR Map
+void putInANDORMap(string clause, string right);
+//this will keep on add new literals to a clause after resolution
+void putClauseInNewMap(vector<int> clause,int s_no, multimap<int, vector<int>>& new_clauses);
+//this function will take input a substring and return the type of operator found in the substring
+//coding for the operators in given inside the function implementation
+int getOperatorType(string substr);
+//this will print all the content of the queries vector
+void printVector(vector<string> queries);
+//this function displays the inforamtion relating to the processed part of the sentence
+void displayInfo(string sentence, int si, int ei, int len);
+//using this function we can see the converted grammar in CNF form
+void printGrammarinCNFform();
+//this just prints the mapping of variables
+void printVariableMapper(map<string, InputParameter> var_mapping);
+//print the map that contains the clauses that we got after performing resolution
+void printNewClausesMap(multimap<int, vector<int>> new_clauses);
+//print the name, state and input parameters of a predicate
+void printPredicate(Predicate pr);
+//this will print the newly generated clause that we get after resolution
+void printNewClause(vector<int> clause);
+
+//the goal of this function is to create new variable names in different sentences so that we don't have any issues later
+void standardizeGrammar(multimap<int, vector<int>>& or_map);
+//this function checks whether a variable name is present in the map or not
+//if it is, it will return the replacement name
+//if it is not, it will return empty string
+string checkIfNameExists(string name, map<string,InputParameter>& var_name_map);
+
+//this function will perform the KB & ~a
+void unifyQueryAndKB(string query);
+
+//this function will implement the resolution algorithm for the current KB
+bool PL_RESOLUTION();
+//this function will try to resolve 2 clauses at a time
+bool PL_RESOLVE(vector<int> ci,vector<int> cj, multimap<int, vector<int>>& new_clauses);
+//this will try to find positive literals in the first clause that are also present in the
+//second clause as negative literals and then try to unify them
+bool resolvePositiveWithNegative(vector<int> ci,vector<int> cj, multimap<int, vector<int>>& new_clauses);
+//this function will try to unify two predicates that have the same name but opposite states
+bool unify(Predicate p1,Predicate p2, map<string, InputParameter>& var_mapping);
+//after resolution, this will create a new clause that is the resultant of 
+//resolving two complementary clauses
+void createNewClause(int index_i, int index_j, vector<int> ci, vector<int> cj, map<string, InputParameter> var_mapping, multimap<int, vector<int>> & new_clauses);
+//this will check whether we have found a contradiction or not
+bool isEndCondition(vector<int> ci,vector<int> cj);
+//this function will try to unify two predicates that have the same name but opposite states
+bool willUnify(Predicate p1,Predicate p2);
+//before adding a clause to KB we are going to check whether it's already present or not
+bool isClauseAlreadyPresent(const vector<int> & clause, multimap<int, vector<int>> & new_clauses);
+//this function checks whether two predicates are same or not
+bool arePredicatesSame(Predicate p1, Predicate p2);
+//this function checks whether two predicates are same or not
+bool arePredicatesExactlySame(Predicate p1, Predicate p2);
+//this will find the union of clauses and new clauses. basically it will only add clauses that are not
+//already present. It will return the number of clauses added to the previous KB
+int mergeNewAndOldClauses(multimap<int, vector<int>> new_clauses, multimap<int, vector<int>> & or_map);
+//this function will perform the factoring on a single clause so that we don't end up with infinite loops
+bool clauseContainsPredicate(Predicate p2, vector<int> clause, map<string, InputParameter>& var_mapping);
+clock_t begin_time;
+bool global_flag = true;
+int main(){
+	
+	//opening the file for reading data
+	ifstream inFile("input.txt");
+	//checking if the file opened correctly or not
+	if(inFile.is_open() == false)
+	{
+		cout << "File could not be opened!!!" << endl;
+		return -1;
+	}
+
+	//store the number of queries to handle
+    int num_queries = 0;
+	string line = "";
+	//read the number of queries from the file
+	getline(inFile,line);
+	num_queries = stoi(line);
+	//cout << "Number of queries in the input file is: " << num_queries << endl;
+	//this vector will store the queries for later testing
+	vector<string> queries;
+    
+	//reading the queries from the file and storing them in the vector
+	for(int i = 0; i < num_queries; i++){
+		getline(inFile,line);
+		//cout << line << endl;
+		//this will remove any space from the query
+		line.erase(remove_if(line.begin(), line.end(), ::isspace), line.end());
+		queries.push_back(line);
+	}
+
+	//printVector(queries);
+
+	//will store the number of original sentences in the KB
+	int num_sentences = 0;
+	
+	//read the number of sentences from the file
+	getline(inFile,line);
+	num_sentences = stoi(line);
+	//cout << "Number of sentences in the KB are: " << num_sentences << endl;
+	
+	//this vector will store the sentences for building KB
+	vector<string> sentences;
+    
+	//reading the queries from the file and storing them in the vector
+	for(int i = 0; i < num_sentences; i++){
+		getline(inFile,line);
+		//cout << line << endl;
+		//this will remove any space from the sentence
+		line.erase(remove_if(line.begin(), line.end(), ::isspace), line.end());
+		//cout << "Sentence after removing spaces is: " << endl;
+		//cout << line << endl;
+		sentences.push_back(line);
+	}
+
+	//closing the file as no more processing needed
+	inFile.close();
+	
+	//printVector(sentences);
+
+	//this loop will take sentence one by one and process them
+	for(int i = 0; i < num_sentences; i++)
+	//for(int i = 0; i < 6; i++)
+	{
+		//making a copy so that original sentences are still preserved
+		string sentence = sentences[i];
+		global_sno++;
+		do {
+			//this loop will keep on running till there is nothing more to parse in a sentence
+		} while (parseSentence(sentence) == true);
+	}//after this grammar has been converted to CNF
+	//cout << "Size of OR Map is " << or_map.size() << endl;
+	//printGrammarinCNFform();
+	standardizeGrammar(or_map);
+	printGrammarinCNFform();
+	//reading the queries from the file and storing them in the vector
+	ofstream outFile("output.txt");
+	if(!outFile.is_open())
+	{
+		cout<< "Output file could not be opened!!!" << endl;
+		return 0;
+	}
+	int copy_global_sno = (++global_sno);
+	for(int i = 0; i < num_queries; i++){
+	//for(int i = 0; i < 1; i++){
+		//cout << queries[i] << endl;
+		multimap<int, vector<int>> copy_or_map = or_map;
+		map<int, Predicate> copy_predicate_map = predicate_map;
+		//unifyQueryAndKB(queries[i]);
+		unifyQueryAndKB(queries[i]);
+		printGrammarinCNFform();
+		global_sno = copy_global_sno;
+		//global_sno = or_map.size();
+		begin_time = clock();
+		global_flag = true;
+
+		//printGrammarinCNFform();
+		bool result = PL_RESOLUTION();
+		cout << "Result is " << result << endl;
+		if(result == true)
+		{
+			outFile << "TRUE" << endl;
+		} else {
+			outFile << "FALSE" << endl;
+		}
+
+		//reverting everything back to as it was before resolving the query 
+		/////////////////////////////////////////////////////////////
+		or_map = copy_or_map;
+		predicate_map = copy_predicate_map;
+		/////////////////////////////////////////////////////////////
+		
+	}
+
+	outFile.close();
+    return 0;
+
+} //end of main function
+
+//this function will implement the resolution algorithm for the current KB
+bool PL_RESOLUTION()
+{
+	do {
+		multimap<int, vector<int>> new_clauses;
+		//for(int i = (int)or_map.size() - 1; i > 0; i--)
+		for(int i = 0; i < (int)or_map.size() - 1; i++)
+		{
+			//for(int j = i-1; j >= 0; j--)
+			for(int j = i+1; j < (int)or_map.size(); j++)
+			{
+
+				vector<int> ci = or_map.find(i)->second;
+				vector<int> cj = or_map.find(j)->second;
+
+				bool answer = PL_RESOLVE(ci,cj, new_clauses);
+				if(global_flag == false)
+					return false;
+				if(answer == true)
+					return true;
+
+				
+			}
+		}//outer loop
+		standardizeGrammar(new_clauses);
+		int count = mergeNewAndOldClauses(new_clauses, or_map);
+		
+		cout << "Added " << count << " new clauses after resolution" << endl;
+		//cout << "###########################################################"<<endl;
+		//cout << "                       NEW GRAMMAR                         " << endl;
+		//printGrammarinCNFform();
+		//cout << "###########################################################"<<endl;
+		if(count == 0)
+			return false;
+	} while(true);
+		return false;
+}
+
+//this will find the union of clauses and new clauses. basically it will only add clauses that are not
+//already present. It will return the number of clauses added to the previous KB
+int mergeNewAndOldClauses(multimap<int, vector<int>> new_clauses, multimap<int, vector<int>> & or_map)
+{
+	int count = 0;
+
+	for(multimap<int, vector<int>>::iterator i = new_clauses.begin(); i != new_clauses.end(); i++)
+	{
+		bool result = isClauseAlreadyPresent(i->second, or_map);
+		if(result == false)
+		{
+			putClauseInNewMap(i->second,or_map.size(), or_map);	
+			count++;
+		}
+	}
+
+	return count;
+}
+
+//this function will try to resolve 2 clauses at a time
+bool PL_RESOLVE(vector<int> ci,vector<int> cj, multimap<int, vector<int>>& new_clauses)
+{
+	bool answer = resolvePositiveWithNegative(ci,cj, new_clauses);
+	if(global_flag == false)
+		return false;
+	if(answer == true)
+		return true;
+	else {
+		answer = resolvePositiveWithNegative(cj,ci, new_clauses);
+		if(global_flag == false)
+			return false;
+		return answer;
+	}
+}
+
+//this will try to find positive literals in the first clause that are also present in the
+//second clause as negative literals and then try to unify them
+bool resolvePositiveWithNegative(vector<int> ci,vector<int> cj, multimap<int, vector<int>>& new_clauses)
+{
+		
+	bool result = isEndCondition(ci, cj);
+	if(result == true)
+	{
+		return true;
+	} else {
+	
+		for(int i = 0; i < (int)ci.size(); i++)
+		{
+			for(int j = 0; j < (int)cj.size(); j++)
+			{
+				clock_t end_time = clock();
+				double elapsed_secs = double(end_time - begin_time) / CLOCKS_PER_SEC;
+				if(elapsed_secs >= 27)
+				{
+					global_flag = false;
+					return false;
+				}
+				int key_ci = ci[i];
+				int key_cj = cj[j];
+
+				map<int, Predicate>::iterator pitr1 = predicate_map.find(key_ci);
+				map<int, Predicate>::iterator pitr2 = predicate_map.find(key_cj);
+
+				if(pitr1 == predicate_map.end() || pitr2 == predicate_map.end())
+				{
+					cout << "SHOULD NEVER HAPPEN. THIS WOULD IMPLY THAT OR HAS SOME KEYS THAT ARE  NOT PRESENT IN PREDICATE MAP!!!!" << endl;
+				}else {
+					Predicate p1 = pitr1->second;
+					Predicate p2 = pitr2->second;
+
+					if((p1.name == p2.name) && (p1.state==true) && (p2.state==false))
+					{
+						map<string, InputParameter> var_mapping;
+						bool flag = unify(p1,p2, var_mapping);
+						if(flag == true)
+						{
+							//cout << p1.s_no << ": ";
+							//printPredicate(p1);
+							//cout << " + " << p2.s_no << ": ";
+							//printPredicate(p2);
+							////printVariableMapper(var_mapping);
+							createNewClause(i, j, ci, cj, var_mapping, new_clauses);
+						}
+						else
+						{
+							//cout << "We CANNOT unify " << p1.name << " in sentence " << p1.s_no << " & " << p2.s_no << endl;
+						}
+					}
+				}
+			}
+		}
+
+	}
+	return false;
+}
+//this will check whether we have found a contradiction or not
+bool isEndCondition(vector<int> ci,vector<int> cj)
+{
+	if((ci.size() == 1) && (cj.size() == 1))
+	{
+		int key_ci = ci[0];
+		int key_cj = cj[0];
+
+		map<int, Predicate>::iterator pitr1 = predicate_map.find(key_ci);
+		map<int, Predicate>::iterator pitr2 = predicate_map.find(key_cj);
+
+		if(pitr1 == predicate_map.end() || pitr2 == predicate_map.end())
+		{
+			cout << "SHOULD NEVER HAPPEN. THIS WOULD IMPLY THAT OR HAS SOME KEYS THAT ARE  NOT PRESENT IN PREDICATE MAP!!!!" << endl;
+			cout << "INSIDE isEndCondition function" << endl;
+			return false;
+		}else {
+			Predicate p1 = pitr1->second;
+			Predicate p2 = pitr2->second;
+
+			if((p1.name == p2.name) && (p1.state != p2.state))
+			{
+				bool result = willUnify(p1,p2);
+				return result;
+			} else 
+				return false;
+		}
+
+	} else 
+		return false;
+}
+
+//this function will try to unify two predicates that have the same name but opposite states
+bool willUnify(Predicate p1,Predicate p2)
+{
+	vector<InputParameter> para1 = p1.parameters;
+	vector<InputParameter> para2 = p2.parameters;
+
+	for(int i = 0; i < (int)para1.size(); i++)
+	{
+		if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name != para2[i].name))
+		{
+			return false;
+		} else if(para1[i].type == 'v' && para2[i].type == 'v')
+		{
+			return false;
+		} else if(para1[i].type == 'c' && para2[i].type == 'v' )
+		{
+			continue;
+		} else if(para1[i].type == 'v' && para2[i].type == 'c' )
+		{
+			continue;
+		} else 
+		{
+			continue;
+		} 
+	}
+
+	//cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << endl;
+	//printPredicate(p1);
+	//printPredicate(p2);
+	//cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << endl;
+	return true;
+}
+//after resolution, this will create a new clause that is the resultant of 
+//resolving two complementary clauses
+void createNewClause(int index_i, int index_j, vector<int> ci, vector<int> cj, map<string, InputParameter> var_mapping, multimap<int, vector<int>> & new_clauses)
+{
+	vector<int> clause;
+	for(int i = 0; i < (int)ci.size(); i++)
+	{
+		if(i == index_i)
+			continue;
+		else 
+		{
+			int key = ci[i];
+			map<int, Predicate>::iterator pitr = predicate_map.find(key);
+			Predicate p = pitr->second;
+			p.s_no = global_sno;
+			for(int k = 0; k < (int)p.parameters.size(); k++)
+			{
+				map<string, InputParameter>::iterator vitr = var_mapping.find(p.parameters[k].name);
+				if(vitr != var_mapping.end())
+				{
+					p.parameters[k].name = vitr->second.name;
+					p.parameters[k].type = vitr->second.type;
+				}
+			}
+			//if (clauseContainsPredicate(p, clause, var_mapping) == false)
+			{
+				int map_key = insertPredicateintoMaps(p);
+				clause.push_back(map_key);	
+
+			} 
+			//int map_key = insertPredicateintoMaps(p);
+			//clause.push_back(map_key);
+			//putInNewMap(map_key,p.s_no, new_clauses);
+		}
+	}
+
+	for(int j = 0; j < (int)cj.size(); j++)
+	{
+		if(j == index_j)
+			continue;
+		else {
+			int key = cj[j];
+			map<int, Predicate>::iterator pitr = predicate_map.find(key);
+			Predicate p = pitr->second;
+			p.s_no = global_sno;
+			for(int k = 0; k < (int)p.parameters.size(); k++)
+			{
+				map<string, InputParameter>::iterator vitr = var_mapping.find(p.parameters[k].name);
+				if(vitr != var_mapping.end())
+				{
+					p.parameters[k].name = (vitr->second).name;
+					p.parameters[k].type = (vitr->second).type;
+				}
+			}
+
+			//if (clauseContainsPredicate(p, clause, var_mapping) == false)
+			{
+				int map_key = insertPredicateintoMaps(p);
+				clause.push_back(map_key);	
+
+			} 
+			//int map_key = insertPredicateintoMaps(p);
+			//clause.push_back(map_key);
+		}
+	}
+
+	if(clause.size() == 0)
+	{
+		cout << "I don't think this should ever happen!!!" << endl;
+		cout << "Inside create new clause function!!!" << endl;
+	} else {
+		bool flag = isClauseAlreadyPresent(clause, new_clauses);
+		if(flag == false)
+		{
+			//cout << " = ";
+			//printNewClause(clause);
+			putClauseInNewMap(clause,global_sno, new_clauses);
+			global_sno++;
+		}else {
+			//cout << " = Already Present!!!" << endl;;
+			//since the sentence is already present, we don't need to do anything
+		}
+		
+	}
+	//printNewClausesMap(new_clauses);
+}
+
+//before adding a clause to KB we are going to check whether it's already present or not
+bool isClauseAlreadyPresent(const vector<int> & ci, multimap<int, vector<int>> & new_clauses)
+{
+	for(multimap<int, vector<int>>::iterator itr = new_clauses.begin(); itr != new_clauses.end(); itr++)
+	{
+		vector<int> cj = itr->second;
+		if(ci.size() != cj.size())
+		{
+			continue;
+		} else {
+			//these will store the mappings of one predicate to another
+			vector<int> index_ci;
+			vector<int> index_cj;
+	
+			for(int i = 0; i < (int)ci.size(); i++)
+			{
+				for(int j = 0; j < (int)cj.size(); j++)
+				{
+					int key_ci = ci[i];
+					int key_cj = cj[j];
+
+					map<int, Predicate>::iterator pitr1 = predicate_map.find(key_ci);
+					map<int, Predicate>::iterator pitr2 = predicate_map.find(key_cj);
+
+					if(pitr1 == predicate_map.end() || pitr2 == predicate_map.end())
+					{
+						cout << "SHOULD NEVER HAPPEN. THIS WOULD IMPLY THAT OR HAS SOME KEYS THAT ARE  NOT PRESENT IN PREDICATE MAP!!!!" << endl;
+					}else {
+						Predicate p1 = pitr1->second;
+						Predicate p2 = pitr2->second;
+
+						if((p1.name == p2.name) && (p1.state==p2.state))
+						{
+							bool result = arePredicatesSame(p1, p2);
+							if(result == true)
+							{
+								vector<int>::iterator itrj = std::find(index_cj.begin(), index_cj.end(), j);
+								if(itrj == index_cj.end())
+								{
+									index_cj.push_back(j);
+									index_ci.push_back(i);
+									break;
+								} else {
+									continue;
+								}
+							}
+							else
+							{
+								continue;
+							}
+						}
+					}
+				}
+			}
+
+			if((index_ci.size() == index_cj.size()) && (index_ci.size() == ci.size()))
+			{
+				//cout << endl << "The matching Clauses are: " << endl;
+				//cout << "1: ";
+				//printNewClause(ci);
+				//cout << endl << "2: ";
+				//printNewClause(cj);
+				//cout << endl;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+//this function checks whether two predicates are exactly the same or not (including their variable names)
+bool arePredicatesExactlySame(Predicate p1, Predicate p2)
+{
+	vector<InputParameter> para1 = p1.parameters;
+	vector<InputParameter> para2 = p2.parameters;
+	
+	for(int i = 0; i < (int)para1.size(); i++)
+	{
+		if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name != para2[i].name))
+		{
+			return false;
+		} else if(para1[i].type == 'v' && para2[i].type == 'c')
+		{
+			return false;
+		} else if(para1[i].type == 'c' && para2[i].type == 'v')
+		{
+			return false;
+		}else if(para1[i].type == 'v' && para2[i].type == 'v' && (para1[i].name != para2[i].name))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+//this function checks whether two predicates are same or not
+bool arePredicatesSame(Predicate p1, Predicate p2)
+{
+	vector<InputParameter> para1 = p1.parameters;
+	vector<InputParameter> para2 = p2.parameters;
+	
+	for(int i = 0; i < (int)para1.size(); i++)
+	{
+		if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name != para2[i].name))
+		{
+			return false;
+		} else if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name == para2[i].name))
+		{
+			continue;
+		} else if(para1[i].type == 'v' && para2[i].type == 'c')
+		{
+			return false;
+		} else if(para1[i].type == 'c' && para2[i].type == 'v')
+		{
+			return false;
+		}else if(para1[i].type == 'v' && para2[i].type == 'v')
+		{
+			continue;
+		}
+	}
+
+	return true;
+}
+//this will keep on add new literals to a clause after resolution
+void putClauseInNewMap(vector<int> clause,int s_no, multimap<int, vector<int>>& new_clauses)
+{
+	multimap<int, vector<int>>::iterator iter = new_clauses.find(s_no);
+	//if this is the only predicate in the sentence then following check should be true
+	if(iter == new_clauses.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		new_clauses.insert(pair<int, vector<int>>(s_no,clause));
+		//cout << "Inserted sentence # " << s_no << " in the OR Map!!!" << endl;
+	} else {
+		iter->second.insert(iter->second.end(), clause.begin(), clause.end());
+	}
+}
+//this function will try to unify two predicates that have the same name but opposite states
+bool unify(Predicate p1,Predicate p2, map<string, InputParameter>& var_mapping)
+{	
+	vector<InputParameter> para1 = p1.parameters;
+	vector<InputParameter> para2 = p2.parameters;
+
+	for(int i = 0; i < (int)para1.size(); i++)
+	{
+		if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name != para2[i].name))
+		{
+			return false;
+		} else if(para1[i].type == 'c' && para2[i].type == 'c' && (para1[i].name == para2[i].name))
+		{
+			continue;
+		} else if(para1[i].type == 'v' && para2[i].type == 'c')
+		{
+			InputParameter ip;
+			ip.name = para2[i].name;
+			ip.type = para2[i].type;
+			var_mapping.insert(pair<string,InputParameter>(para1[i].name,ip));
+		} else if(para1[i].type == 'c' && para2[i].type == 'v')
+		{
+			InputParameter ip;
+			ip.name = para1[i].name;
+			ip.type = para1[i].type;
+			var_mapping.insert(pair<string,InputParameter>(para2[i].name,ip));
+		}else if(para1[i].type == 'v' && para2[i].type == 'v')
+		{
+			InputParameter ip;
+			ip.name = para2[i].name;
+			ip.type = para2[i].type;
+			var_mapping.insert(pair<string,InputParameter>(para1[i].name,ip));
+		}
+	}
+
+	return true;
+}
+
+//this function will perform the KB & ~a
+void unifyQueryAndKB(string query)
+{
+	//this will store the starting location of the predicate name
+	int predicate_start_location = -1;
+	int map_key = -1;
+
+	Index index = {-1, -1};
+	//find the location of the inner most brackets so that we can start solving from there
+	findInnerMostBrackets(query, index);
+
+	if(index.start == -1) 
+	{
+		//this should never happen because query will definitely have () brackets due to predicate
+		cout << "Should Never happen. This would imply that query has no predicate" << endl;
+	} else {
+		string substr = query.substr(index.start+1, (index.end - index.start - 1));
+		//cout << "Extracted substring is: " << substr << endl;
+
+		vector<InputParameter> parameters;
+		findInputParameters(substr, parameters);
+		if(parameters.size() == 0)
+		{
+			cout << "THIS SIZE SHOULD NEVER BE ZERO" << endl;
+			cout << "THIS WOULD IMPLY THAT PREDICATE HAS NO INPUT PARAMETERS!!!" << endl;
+		}
+
+		string predicate_name = findPredicateName(query,index.start, predicate_start_location);
+		//cout << "Name of predicate is: " << predicate_name << endl;
+		if(predicate_name.size() == 0)
+		{
+			cout << "THIS SIZE SHOULD NEVER BE ZERO" << endl;
+			cout << "THIS WOULD IMPLY THAT PREDICATE NAME HAS LENGTH 0!!!" << endl;
+		}
+
+		Predicate p;
+		p.name = predicate_name;
+		p.parameters = parameters;
+		p.s_no = (int)or_map.size();
+		//I have already negated the query here, so no need to do it again
+		if(query[0] == '~')
+			p.state = true;
+		else
+			p.state = false;
+
+		//this function will insert the predicate in it's correct location in the map
+		map_key = insertPredicateintoMaps(p);
+
+		//this function just displays info of what was being processed
+		//displayInfo(sentence, predicate_start_location, index.end, index.end - predicate_start_location + 1);
+		//this function replaces the processed part with the key from the predicate map
+		//sentence.replace(predicate_start_location, index.end - predicate_start_location + 1, to_string((long long)map_key));
+		//cout << "Sentence after processing is: " << sentence << endl;
+
+		if(query[0] == '~' || isalpha(query[0])) 
+		{
+			//handing the case when the sentence has only 1 predicate and nothing else
+			handleOnlyPredicateCase(map_key, p.s_no);
+		}
+	}
+}
+
+bool parseSentence(string& sentence)
+{
+	string copy_sentence = sentence;
+	//this will store the starting location of the predicate name
+	int predicate_start_location = -1;
+	int map_key = -1;
+
+	Index index = {-1, -1};
+	//find the location of the inner most brackets so that we can start solving from there
+	findInnerMostBrackets(sentence, index);
+
+	if(index.start == -1) 
+	{
+		//handling the case when at the end we are only left with AND clauses
+		//in this case we will have to split them up in multiple sentences
+		bool is_sentence_simple = checkSimplified(sentence);
+		if(is_sentence_simple == false)
+		{
+			bool has_and = hasANDEDclauses(sentence);
+			if(has_and == true)
+			{
+				string temp;
+				parseDummyAND(sentence, temp);
+				vector<int> and_clauses = getANDEDClause(temp);
+				putANDClauseInORMap(and_clauses);
+			} else {
+				bool has_hash = hasHASHEDclauses(sentence);
+				if(has_hash == true)
+				{
+					string temp;
+					parseDummyHash(sentence, temp);
+					putANDEDClausesInORMap(temp);
+					//vector<int> and_clauses = getANDEDClause(temp);
+					//putANDClauseInORMap(and_clauses);
+				}
+			}
+		}
+		return false;
+	} else { // we were able to find brackets in the sentence
+		//cout << "Start index: " << index.start << " End Index: " << index.end << endl;
+		//extracting the substring from the main string which contains inner most brackets
+		//I have remove the brackets for simplification of later processing
+		string substr = sentence.substr(index.start+1, (index.end - index.start - 1));
+		//cout << "Extracted substring is: " << substr << endl;
+
+		//checking if extracted substring contains any operators
+		bool flag = checkIfContainsOperator(substr);
+		if(flag == false) //there is no operators in the bracket, which means that these brackets are for predicate inputs
+		{
+			vector<InputParameter> parameters;
+			findInputParameters(substr, parameters);
+			if(parameters.size() == 0)
+			{
+				cout << "THIS SIZE SHOULD NEVER BE ZERO" << endl;
+				cout << "THIS WOULD IMPLY THAT PREDICATE HAS NO INPUT PARAMETERS!!!" << endl;
+			}
+
+			string predicate_name = findPredicateName(sentence,index.start, predicate_start_location);
+			//cout << "Name of predicate is: " << predicate_name << endl;
+			if(predicate_name.size() == 0)
+			{
+				cout << "THIS SIZE SHOULD NEVER BE ZERO" << endl;
+				cout << "THIS WOULD IMPLY THAT PREDICATE NAME HAS LENGTH 0!!!" << endl;
+			}
+
+			Predicate p;
+			p.name = predicate_name;
+			p.parameters = parameters;
+			p.state = true; //initially we will assume that every predicate is true unless stated otherwise
+			p.s_no = global_sno;
+			
+			//this function will insert the predicate in it's correct location in the map
+			map_key = insertPredicateintoMaps(p);
+
+			//this function just displays info of what was being processed
+			//displayInfo(sentence, predicate_start_location, index.end, index.end - predicate_start_location + 1);
+			//this function replaces the processed part with the key from the predicate map
+			sentence.replace(predicate_start_location, index.end - predicate_start_location + 1, to_string((long long)map_key));
+			//cout << "Sentence after processing is: " << sentence << endl;
+
+			//if(predicate_start_location == 0)
+			if(copy_sentence[0] == '~' || isalpha(copy_sentence[0]))
+			{
+				//handing the case when the sentence has only 1 predicate and nothing else
+				handleOnlyPredicateCase(map_key, global_sno);
+			}
+		} else 
+		{
+			//found an operator inside the bracket
+			//first we will find out which operator we have found
+			int type = getOperatorType(substr);
+			if(type == 0)  //this is not operator
+			{
+				string clause = "";
+				//this function will extract the portion from the substring which is to be NOT
+				parseNOT(substr, clause);
+				bool is_clause_simple = checkSimplified(clause);
+				if(is_clause_simple)//this is the simplest case
+				{
+					takeNOT(clause);
+					//putNotInOrMap(clause, s_no);
+					//this function replaces the processed part with the key from the OR map which is basically sentence number
+					sentence.replace(index.start, index.end - index.start + 1, clause);
+					//cout << "Sentence after processing is: " << sentence << endl;
+				} else {
+					//premise has some operators in it
+					bool has_and = hasANDEDclauses(clause);
+					if(has_and == true)
+					{
+						string temp;
+						parseDummyAND(clause, temp);
+						vector<int> or_clauses = simplifyANDEDClause(temp);
+						putClauseInORMap(or_clauses, global_sno);
+						//this function replaces the processed part with the key from the OR map which is basically sentence number
+						sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)global_sno));
+						//cout << "Sentence after processing is: " << sentence << endl;
+					} else {
+						//#####################################################################################################
+						cout << "WHAT WILL HAPPEN IF PREMISE DOESN'T HAVE AND IN IT!!!!" << endl;
+						//#####################################################################################################
+					}
+				}
+
+			} else if(type == 1) //operator is AND operator
+			{
+				string ans = handleANDCase(substr, global_sno, sentence);
+				if(ans == "")
+				{
+					sentence.replace(index.start, index.end - index.start + 1, "@"+to_string((long long)and_index));
+					//cout << "Sentence after processing is: " << sentence << endl;
+					and_index++;
+				} else if(ans[0] == '^'){
+					sentence.replace(index.start, index.end - index.start + 1, ans);
+				}
+				else {
+					sentence.replace(index.start, index.end - index.start + 1, "@"+ans);
+				}
+			} else if(type == 2) //this the OR operator
+			{
+				string ret = handleORCase(substr, global_sno);
+				if(ret != "")
+					sentence.replace(index.start, index.end - index.start + 1, ret);
+				else
+					sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)global_sno));
+			} else if(type == 3) //operator is implication operator
+			{
+				//this function will split the implication sentence into premise and consequence
+				string premise = "";
+				string consequence = "";
+				parseImplication(substr, premise, consequence);
+				bool is_premise_simple = checkSimplified(premise);
+				bool is_consequence_simple = checkSimplified(consequence);
+
+				if(is_premise_simple && is_consequence_simple)//this is the simplest case
+				{
+					takeNOT(premise);
+					putInORMap(premise,consequence,global_sno);
+					//this function replaces the processed part with the key from the OR map which is basically sentence number
+					sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)global_sno));
+					//cout << "Sentence after processing is: " << sentence << endl;
+				} else if(!is_premise_simple && is_consequence_simple) 
+				{
+					//premise has some operators in it
+					bool has_and = hasANDEDclauses(premise);
+					if(has_and == true)
+					{
+						string temp;
+						parseDummyAND(premise, temp);
+						vector<int> or_clauses = simplifyANDEDClause(temp);
+						putComplexSentenceInORMap(or_clauses, consequence, global_sno);
+						//this function replaces the processed part with the key from the OR map which is basically sentence number
+						sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)global_sno));
+						//cout << "Sentence after processing is: " << sentence << endl;
+					} else {
+						//#####################################################################################################
+						cout << "WHAT WILL HAPPEN IF PREMISE DOESN'T HAVE AND IN IT!!!!" << endl;
+						//#####################################################################################################
+					}
+				} else if(is_premise_simple && !is_consequence_simple) 
+				{
+					//premise has some operators in it
+					bool has_or = hasOREDclauses(consequence);
+					if(has_or == true)
+					{
+						takeNOT(premise);
+						string temp;
+						parseDummyOR(consequence, temp);
+						putSinglePredicateInOrMap(premise, stoi(temp));
+						//vector<int> or_clauses = simplifyANDEDClause(temp);
+						//putComplexSentenceInORMap(or_clauses, consequence, s_no);
+						//this function replaces the processed part with the key from the OR map which is basically sentence number
+						sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)global_sno));
+						//cout << "Sentence after processing is: " << sentence << endl;
+					} else {
+						//#####################################################################################################
+						cout << "WHAT WILL HAPPEN IF PREMISE DOESN'T HAVE AND IN IT!!!!" << endl;
+						//#####################################################################################################
+					}
+				} else {
+					//#####################################################################################################
+					cout << "Have to handle these cases!!!!" << endl;
+					//#####################################################################################################
+				}
+			}//end of if type == check
+			
+		}
+
+	}//we were able to find brakcets and we are done processing
+	
+
+	return true;
+}
+
+//this function will handle the case when there is only 1 predicate in the whole sentence
+void handleOnlyPredicateCase(int map_key, int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = or_map.find(s_no);
+	//if this is the only predicate in the sentence then following check should be true
+	if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		vector<int> clauses;
+		clauses.push_back(map_key);
+		or_map.insert(pair<int, vector<int>>(s_no,clauses));
+		//cout << "Inserted sentence # " << s_no << " in the OR Map!!!" << endl;
+	} else {
+		//no need to do anything
+	}
+}
+
+//this function will store ANDed predicate in it's right place in the AND map
+void putClauseInANDMap(string clause, int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = and_map.find(s_no);
+	if(iter == and_map.end())
+	{
+		cout << "CANNOT HAPPEN!!! WILL IMPLY THAT KEY FROM AND MAP IS NOT CORRECT" << endl;
+		
+	} else {
+		//############################################################################################################
+		//I THINK THIS IS THE RIGHT THING TO DO HERE
+		//#############################################################################################################
+		iter->second.push_back(stoi(clause));
+		
+	}
+}
+
+//this function will ge the ANDED clauses from AND OR Map and put them in the OR map
+void putANDEDClausesInORMap(string and_index)
+{
+	int and_map_id = stoi(and_index);
+	vector<int> new_key;
+	multimap<int, vector<int>>::iterator iter = and_map.find(and_map_id);
+
+	if(iter != and_map.end())
+	{
+		for(int i = 0; i < (int)iter->second.size(); i++)
+		{
+			int and_or_key = iter->second[i];
+			multimap<int, vector<int>>::iterator iter2 = and_or_map.find(and_or_key);
+			if(iter2 == and_or_map.end())
+			{
+				cout << "Should never happen...........inside putANDEDClausesInORMap function" << endl;
+			}
+
+			vector<int> values = iter2->second;
+			//values.push_back(and_key);
+			//values.push_back(stoi(right));
+			//new_key.push_back(and_or_index);
+			or_map.insert(pair<int, vector<int>>(global_sno, values));
+			global_sno++;
+			and_or_map.erase(iter2);
+			//and_or_index++;
+		}
+		and_map.erase(iter);
+	} else {
+		cout << "Should never happen!!! Inside putANDEDClausesInORMap function" << endl;
+	}
+	global_sno--;
+}
+//this function will split the and clauses and store them in OR map
+void putANDClauseInORMap(vector<int> and_clauses)
+{
+	for(int i = 0; i < (int)and_clauses.size(); i++)
+	{
+		vector<int> predicate;
+		predicate.push_back(and_clauses[i]);
+		or_map.insert(pair<int, vector<int>>(global_sno,predicate));
+		global_sno++;
+	}
+	global_sno--;
+}
+
+//this code will handle the insertions in AND_OR Map
+void putInANDORMap(string clause, string right)
+{
+	int and_map_id = stoi(clause);
+	vector<int> new_key;
+	multimap<int, vector<int>>::iterator iter = and_map.find(and_map_id);
+
+	if(iter != and_map.end())
+	{
+		for(int i = 0; i < (int)iter->second.size(); i++)
+		{
+			int and_key = iter->second[i];
+			vector<int> values;
+			values.push_back(and_key);
+			if(i != 0)
+			{
+				int predicate_index = stoi(right);
+				map<int,Predicate>::iterator pitr = predicate_map.find(predicate_index);
+				Predicate temp = pitr->second;
+				predicate_map.insert(pair<int,Predicate>(index,temp));
+				values.push_back(index);
+
+				index++;
+			
+			} else {
+				values.push_back(stoi(right));
+			}
+			new_key.push_back(and_or_index);
+			and_or_map.insert(pair<int, vector<int>>(and_or_index, values));
+			and_or_index++;
+		}
+		iter->second.clear();
+		iter->second = new_key;
+	} else {
+		cout << "Should never happen!!! Inside putInANDORMap function" << endl;
+	}
+}
+//this function will store ORed clause in it's right place in the OR map
+void putClauseInORMap(vector<int> clause, int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = or_map.find(s_no);
+	if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		or_map.insert(pair<int, vector<int>>(s_no,clause));
+	} else {
+		//############################################################################################################
+		//I THINK THIS IS THE RIGHT THING TO DO HERE
+		//#############################################################################################################
+		iter->second.insert(iter->second.end(), clause.begin(), clause.end());
+		
+	}
+}
+//this function will combine the ORed premises with consequense using OR operator
+//and then put the whole ORed predicates in the OR map corresponding to a particular sentence
+void putComplexSentenceInORMap(vector<int> clauses,string consequence,int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = or_map.find(s_no);
+	if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		//vector<int> clauses;
+		//clauses.push_back(stoi(premise));
+		clauses.push_back(stoi(consequence));
+		or_map.insert(pair<int, vector<int>>(s_no,clauses));
+	} else {
+		//############################################################################################################
+		//NOT SURE WHAT TO DO HERE
+		//COME BACK AGAIN HERE TO SEE
+		//#############################################################################################################
+		vector<int> clauses;
+		//clauses.push_back(stoi(premise));
+		clauses.push_back(stoi(consequence));
+		or_map.insert(pair<int, vector<int>>(s_no,clauses));
+	}
+	//cout << "Inserted sentence # " << s_no << " in the OR Map!!!" << endl;
+}
+
+//this function will return the IDs of the ANDED clauses
+vector<int> getANDEDClause(string id)
+{
+	int key = stoi(id);
+	multimap<int, vector<int>>::iterator itr = and_map.find(key);
+	if(itr != and_map.end())
+	{
+		//cout << "Processed Predicate with key of: ";
+		vector<int> predicate_keys = itr->second;
+		and_map.erase(key);
+		return predicate_keys;
+	} else {
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT KEY POINTS TO SOMETHING IN AND MAP WHICH DOES NOT EXIST" << endl;
+		vector<int> predicate_keys;
+		return predicate_keys;
+	}
+}
+
+//this function will take the NOT of all the ANDs in the premise
+//and return a vector of ORed clauses
+vector<int> simplifyANDEDClause(string premise)
+{
+	//int key = getANDMapKey(premise);
+	int key = stoi(premise);
+	multimap<int, vector<int>>::iterator itr = and_map.find(key);
+	if(itr != and_map.end())
+	{
+		//cout << "Processed Predicate with key of: ";
+		vector<int> predicate_keys = itr->second;
+		for(int i = 0; i < (int)predicate_keys.size(); i++)
+		{
+			//cout << predicate_keys[i] << " ";
+			takeNOT(to_string((long long)predicate_keys[i]));
+		}
+		cout << endl;
+		and_map.erase(key);
+		return predicate_keys;
+	} else {
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT KEY POINTS TO SOMETHING IN AND MAP WHICH DOES NOT EXIST" << endl;
+		vector<int> predicate_keys;
+		return predicate_keys;
+	}
+}
+
+//this function will extract the key from the premise and then return it to the user
+int getANDMapKey(string str)
+{
+	int position = str.find("@");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION @ OPERATOR INSIDE SUBSTRING" << endl;
+		return -1;
+	} else {
+		string map_key = str.substr(position + 1, string::npos);
+		//cout << "Map Key is: " << map_key << endl;
+		return stoi(map_key);
+	}
+}
+//this function checks whether the non-simple clause has ORs in it
+bool hasOREDclauses(string str)
+{
+	int position = str.find("^");
+	if(position == string::npos)
+	{
+		return false;
+	} else {
+		return true;
+	}
+}
+//this function checks whether the non-simple clause has ANDs in it
+bool hasHASHEDclauses(string str)
+{
+	int position = str.find("#");
+	if(position == string::npos)
+	{
+		return false;
+	} else {
+		return true;
+	}
+}
+
+//this function checks whether the non-simple clause has ANDs in it
+bool hasANDEDclauses(string str)
+{
+	int position = str.find("@");
+	if(position == string::npos)
+	{
+		return false;
+	} else {
+		return true;
+	}
+}
+//this function will put the ANDed predicates in the AND map corresponding to a particular sentence
+void putInANDMap(string left,string right/*,int s_no*/)
+{
+	//multimap<int, vector<int>>::iterator iter = and_map.find(s_no);
+	//if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		vector<int> clauses;
+		clauses.push_back(stoi(left));
+		clauses.push_back(stoi(right));
+		and_map.insert(pair<int, vector<int>>(and_index,clauses));
+	} 
+	//else {
+	//	//############################################################################################################
+	//	//NOT SURE WHAT TO DO HERE
+	//	//COME BACK AGAIN HERE TO SEE
+	//	//#############################################################################################################
+	//	vector<int> clauses;
+	//	clauses.push_back(stoi(left));
+	//	clauses.push_back(stoi(right));
+	//	and_map.insert(pair<int, vector<int>>(and_index,clauses));
+	//}
+}
+//this function will put the NOT clause in the OR Map
+void putSinglePredicateInOrMap(string clause, int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = or_map.find(s_no);
+	if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		vector<int> clauses;
+		clauses.push_back(stoi(clause));
+		or_map.insert(pair<int, vector<int>>(s_no,clauses));
+	} else {
+		iter->second.push_back(stoi(clause));
+	}
+	//cout << "Inserted sentence # " << s_no << " in the OR Map!!!" << endl;
+}
+//this function will put the ORed predicates in the OR map corresponding to a particular sentence
+void putInORMap(string premise,string consequence,int s_no)
+{
+	multimap<int, vector<int>>::iterator iter = or_map.find(s_no);
+	if(iter == or_map.end())
+	{
+		//inserting something for the first time in the OR map corresponding to this sentence
+		vector<int> clauses;
+		clauses.push_back(stoi(premise));
+		clauses.push_back(stoi(consequence));
+		or_map.insert(pair<int, vector<int>>(s_no,clauses));
+	} else {
+		//############################################################################################################
+		//NOT SURE WHAT TO DO HERE
+		//COME BACK AGAIN HERE TO SEE
+		//#############################################################################################################
+		iter->second.push_back(stoi(premise));
+		iter->second.push_back(stoi(consequence));
+	}
+	//cout << "Inserted sentence # " << s_no << " in the OR Map!!!" << endl;
+}
+//this function will take the NOT of the premise of the implication
+void takeNOT(string str)
+{
+	int index = stoi(str);
+	map<int,Predicate>::iterator itr = predicate_map.find(index);
+	if(itr == predicate_map.end())
+	{
+		cout << "THIS IMPLIES THAT KEY IS NOT IN THE PREDICATE MAP!!!!!" << endl;
+		cout << "SHOULD NEVER HAPPEN!!!" << endl;
+	} else {
+		if(itr->second.state == true)
+		{
+			itr->second.state = false;
+		} else {
+			itr->second.state = true;
+		}
+	}
+}
+//this function will tell us whether we need to simplify the premise further or not
+bool checkSimplified(string premise)
+{
+	string delim = "!@^#";
+	for(int i = 0; i < (int)premise.size(); i++)
+	{
+		if(string::npos != delim.find(premise[i]))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+//this function will take input a substring and return the type of operator found in the substring
+//coding for the operators in given inside the function implementation
+int getOperatorType(string substr)
+{
+	if(substr.find("~") != string::npos)
+	{
+		//0 denotes a NOT Operator
+		return 0;
+	} else if(substr.find("&") != string::npos)
+	{
+		//1 denotes a AND Operator
+		return 1;
+	} else if(substr.find("|") != string::npos)
+	{
+		//2 denotes a OR Operator
+		return 2;
+	} else if(substr.find("=") != string::npos || substr.find(">") != string::npos)
+	{
+		//3 denotes a IMPLICATION Operator
+		return 3;
+	} else {
+		cout << "CODE SHOULD NEVER REACH HERE!!!" << endl;
+		cout << "THIS WOULD IMPLY THAT WE CAN'T FIND AN OPERATOR INSIDE THE SUBSTRING " << endl;
+		return -1;
+	}
+	return -1;
+}
+//this function will insert the predicate in it's correct location in the map
+int insertPredicateintoMaps(Predicate p)
+{
+	int copy = index;
+	predicate_map.insert(pair<int,Predicate>(index,p));
+	index++;
+	
+	return copy;
+}
+//given a sentence and position of the opening bracket of predicate input parameters
+//this function will return the name of the predicate by looking backwards
+string findPredicateName(string sentence,int index_start, int& predicate_start_location)
+{
+	//we should ignore the first bracket
+	int i = index_start-1;
+	bool flag = false;
+	for(; i >=0; i--)
+	{
+		if((sentence[i] >= 65 && sentence[i] <= 90) || (sentence[i] >= 97 && sentence[i] <= 122))
+		{
+			continue;
+		} else {
+			flag = true;
+			break;
+		}
+	}
+
+	i++;
+	predicate_start_location = i;
+	string predicate_name = sentence.substr(i, index_start - i);
+	return predicate_name;
+}
+//this function will find the name and type of input parameters for a predicate
+//and store them in a vector of parameters
+void findInputParameters(string substr, vector<InputParameter>& parameters)
+{
+	string myText(substr);
+	istringstream iss(myText);
+	string token;
+	while (std::getline(iss, token, ','))
+	{
+		//cout << "Token is: " << token << std::endl;
+		InputParameter ip;
+		ip.name = token;
+		if(token[0] >= 65 && token[0] <= 90)
+		{
+			ip.type = 'c';
+		} else {
+			if(token.size() == 1)
+				ip.type = 'v';
+			else {
+				cout << "SHOULD NEVER REACH HERE!!!!!" << endl;
+			}
+		}
+		//cout << "Input Parameter Name: " << ip.name << " and it's type is: " << ip.type << endl;
+		parameters.push_back(ip);
+	}
+}
+//this function will extract the portion which is after the @ symbol
+void parseDummyAND(string str, string& clause)
+{
+	int position = str.find("@");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION ~ OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		clause = str.substr(position + 1, string::npos);
+		//cout << "Clause is: " << clause << endl;
+	}
+}
+
+//this function will extract the portion which is after the # symbol
+void parseDummyHash(string str, string& clause)
+{
+	int position = str.find("#");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION ~ OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		clause = str.substr(position + 1, string::npos);
+		//cout << "Clause is: " << clause << endl;
+	}
+}
+
+//this function will extract the portion which is after the @ symbol
+void parseDummyOR(string str, string& clause)
+{
+	int position = str.find("^");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION ~ OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		clause = str.substr(position + 1, string::npos);
+		//cout << "Clause is: " << clause << endl;
+	}
+}
+//this function will extract the portion from the substring which is to be NOT
+void parseNOT(string str, string& clause)
+{
+	int position = str.find("~");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION ~ OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		clause = str.substr(position + 1, string::npos);
+		//cout << "Clause is: " << clause << endl;
+	}
+}
+//this function will split the AND sentence into left and right operand
+void parseAND(string str, string& left, string& right)
+{
+	int position = str.find("&");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION & OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		left = str.substr(0, position);
+		right = str.substr(position + 1, string::npos);
+		//cout << "Left is: " << left << " and right is: " << right << endl;
+	}
+}
+
+//this function will split the AND sentence into left and right operand
+void parseOR(string str, string& left, string& right)
+{
+	int position = str.find("|");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION & OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		left = str.substr(0, position);
+		right = str.substr(position + 1, string::npos);
+		//cout << "Left is: " << left << " and right is: " << right << endl;
+	}
+}
+//this function will split the implication sentence into premise and consequence
+void parseImplication(string str, string& premise, string& consequence)
+{
+	int position = str.find("=>");
+	if(position == string::npos)
+	{
+		cout << "SHOULD NEVER HAPPEN. WOULD IMPLY THAT CAN'T LOCATION => OPERATOR INSIDE SUBSTRING" << endl;
+	} else {
+		premise = str.substr(0, position);
+		consequence = str.substr(position + 2, string::npos);
+		//cout << "Premise is: " << premise << " and consequence is: " << consequence << endl;
+	}
+}
+
+bool checkIfContainsOperator(string substr)
+{
+	string delim = "~|&=>";
+	for(int i = 0; i < (int)substr.size(); i++)
+	{
+		if(string::npos != delim.find(substr[i]))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+//find the location of inner most brackets so that I can start
+//solving from there
+void findInnerMostBrackets(string str, Index & index)
+{
+	for(int i = 0; i < (int)str.size(); i++)
+	{
+		//((()())())
+		if(str[i] == '(')
+		{
+			index.start = i;
+		} else if (str[i] == ')') //as soon as we find the first closing bracket, we are done
+		{
+			index.end = i;
+			return;
+		}
+	}
+}
+
+//this function will print the contents of the input vector
+void printVector(vector<string> queries)
+{
+	//cout << "Size of vector is: " << queries.size() << endl;
+	for(int i = 0; i < (int)queries.size(); i++)
+	{
+		cout << "Query # " << i + 1 << ": " << queries[i] << endl;
+	}
+}
+
+//this function displays the inforamtion relating to the processed part of the sentence
+void displayInfo(string sentence, int si, int ei, int len)
+{
+	cout << "Sentence is: " << sentence << endl;
+	cout << "Starting Index: " << si << endl;
+	cout << "Ending Index: " << ei << endl;
+	cout << "Length of string is: " << len << endl;
+}
+
+//the goal of this function is to create new variable names in different sentences so that we don't have any issues later
+void standardizeGrammar(multimap<int, vector<int>>& or_map)
+{
+	//looping over sentences one by one
+	for(multimap<int, vector<int>>::iterator i = or_map.begin(); i != or_map.end(); i++)
+	{
+		map<string,InputParameter> var_name_map;
+		//cout << i->first  << endl;
+		//looping over the clauses in the sentence one by one
+		for(vector<int>::iterator j = i->second.begin(); j != i->second.end(); j++)
+		{
+			int key = (*j);
+			map<int, Predicate>::iterator pitr = predicate_map.find(key);
+			//getting the info of the predicate from the predicate map
+			if(pitr != predicate_map.end())
+			{
+				//Predicate pr = pitr->second;
+				//vector<InputParameter> parameters = pitr->second.parameters;
+				//finally getting the list of variables in a predicate
+				for(int ip = 0; ip < (int)pitr->second.parameters.size(); ip++)
+				{
+					if(pitr->second.parameters[ip].type == 'v')
+					{
+						string result = checkIfNameExists(pitr->second.parameters[ip].name, var_name_map);
+						if(result == "")
+						{
+							InputParameter inp;
+							inp.name= var_name+to_string((long long)var_no);
+							inp.type = 'v';
+							var_name_map.insert(pair<string, InputParameter>(pitr->second.parameters[ip].name, inp));
+							//cout << pitr->second.parameters[ip].name << " is replaced with " << var_name+to_string((long long)var_no) << endl;
+							pitr->second.parameters[ip].name = var_name+to_string((long long)var_no);
+							var_no++;
+						} else {
+							pitr->second.parameters[ip].name = result;
+						}
+					}
+				}
+			}
+		}
+		//var_name_map.clear();
+	}//end of multimap for
+}
+
+//this function checks whether a variable name is present in the map or not
+//if it is, it will return the replacement name
+//if it is not, it will return empty string
+string checkIfNameExists(string name, map<string,InputParameter>& var_name_map)
+{
+	map<string,InputParameter>::iterator itr = var_name_map.find(name);
+	if(itr == var_name_map.end())
+		return "";
+	else 
+		return itr->second.name;
+}
+//using this function we can see the converted grammar in CNF form
+void printGrammarinCNFform()
+{
+	for(multimap<int, vector<int>>::iterator i = or_map.begin(); i != or_map.end(); i++)
+	{
+		cout << "Sentence # "<< i->first << endl;
+
+		for(vector<int>::iterator j = i->second.begin(); j != i->second.end(); j++)
+		{
+			int key = (*j);
+			map<int, Predicate>::iterator pitr = predicate_map.find(key);
+			if(pitr != predicate_map.end())
+			{
+				Predicate pr = pitr->second;
+				if(pr.state == true) {
+					cout << pr.name << "(";
+				} else {
+					cout << "~" << pr.name << "(";
+				}
+
+				vector<InputParameter> parameters = pr.parameters;
+				for(int ip = 0; ip < (int)parameters.size(); ip++)
+				{
+					if(ip == (parameters.size()-1))
+						cout << parameters[ip].name;
+					else
+						cout << parameters[ip].name << ",";
+				}
+
+				if((j + 1) == i->second.end())
+					cout << ")";
+				else 
+					cout << ") v ";
+			}
+		}
+
+		cout << endl;
+	}
+}
+
+//this just prints the mapping of variables
+void printVariableMapper(map<string, InputParameter> var_mapping)
+{
+	map<string, InputParameter>::iterator itr = var_mapping.begin();
+	for(; itr != var_mapping.end(); itr++)
+	{
+		cout << itr->first << " is mapped on " << itr->second.name << endl;
+	}
+}
+
+//this will print the newly generated clause that we get after resolution
+void printNewClause(vector<int> clause)
+{
+	for(int i = 0; i < (int)clause.size(); i++)
+	{
+		int key = clause[i];
+		map<int, Predicate>::iterator pitr = predicate_map.find(key);
+		if(pitr != predicate_map.end())
+		{
+			Predicate pr = pitr->second;
+			if(pr.state == true) {
+				cout << pr.name << "(";
+			} else {
+				cout << "~" << pr.name << "(";
+			}
+
+			vector<InputParameter> parameters = pr.parameters;
+			for(int ip = 0; ip < (int)parameters.size(); ip++)
+			{
+				if(ip == (parameters.size()-1))
+					cout << parameters[ip].name;
+				else
+					cout << parameters[ip].name << ",";
+			}
+
+			if(i == (clause.size() - 1))
+				cout << ")";
+			else 
+				cout << ") v ";
+		}
+	}
+	cout << endl;
+}
+//print the map that contains the clauses that we got after performing resolution
+void printNewClausesMap(multimap<int, vector<int>> new_clauses)
+{	
+	cout << "***************************NEW CLAUSES***************************" << endl;
+	for(multimap<int, vector<int>>::iterator i = new_clauses.begin(); i != new_clauses.end(); i++)
+	{
+		cout << "Sentence # "<< i->first << endl;
+
+		for(vector<int>::iterator j = i->second.begin(); j != i->second.end(); j++)
+		{
+			int key = (*j);
+			map<int, Predicate>::iterator pitr = predicate_map.find(key);
+			if(pitr != predicate_map.end())
+			{
+				Predicate pr = pitr->second;
+				if(pr.state == true) {
+					cout << pr.name << "(";
+				} else {
+					cout << "~" << pr.name << "(";
+				}
+
+				vector<InputParameter> parameters = pr.parameters;
+				for(int ip = 0; ip < (int)parameters.size(); ip++)
+				{
+					if(ip == (parameters.size()-1))
+						cout << parameters[ip].name;
+					else
+						cout << parameters[ip].name << ",";
+				}
+
+				if((j + 1) == i->second.end())
+					cout << ")";
+				else 
+					cout << ") v ";
+			}
+		}
+
+		cout << endl;
+		cout << "----------------------------------------------------------------------------------" << endl;
+	}
+}
+
+//print the name, state and input parameters of a predicate
+void printPredicate(Predicate pr)
+{
+	//cout << "Sentence #: " << pr.s_no << " has ";
+	if(pr.state == true) {
+		cout << pr.name << "(";
+	} else {
+		cout << "~" << pr.name << "(";
+	}
+
+	vector<InputParameter> parameters = pr.parameters;
+	for(int ip = 0; ip < (int)parameters.size(); ip++)
+	{
+		if(ip == (parameters.size()-1))
+			cout << parameters[ip].name;
+		else
+			cout << parameters[ip].name << ",";
+	}
+	//cout << ")" << endl;
+	cout << ") ";
+}
+//solve the scenario when there is OR operator in the expression
+string handleORCase(string substr, int s_no)
+{
+	string left = "";
+	string right = "";
+	//this function will split the AND sentence into left and right operand
+	parseOR(substr, left, right);
+	bool is_left_simple = checkSimplified(left);
+	bool is_right_simple = checkSimplified(right);
+
+	if(is_left_simple && is_right_simple)//both the operands are simple predicates
+	{
+		putInORMap(left,right,s_no);
+		//this function replaces the processed part with the key from the OR map which is basically sentence number
+		//sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)s_no));
+		//cout << "Sentence after processing is: " << sentence << endl;
+	} else if(!is_left_simple && is_right_simple)
+	{ //left operand is a clause while right operand is predicate
+		bool has_and = hasANDEDclauses(left);
+		if(has_and == true)
+		{
+			//this portion is complex will have to think about it
+			string clause;
+			parseDummyAND(left, clause);
+			putInANDORMap(clause, right);
+			return ("#"+clause);
+			//this function replaces the processed part with the key from the OR map which is basically sentence number
+			//sentence.replace(index.start, index.end - index.start + 1, "#"+clause);
+		} else {
+			bool has_or = hasOREDclauses(left);
+			if(has_or == true)
+			{
+				string clause;
+				parseDummyOR(left, clause);
+				putSinglePredicateInOrMap(right, stoi(clause));
+				//this function replaces the processed part with the key from the OR map which is basically sentence number
+				//sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)s_no));
+			}
+		}
+	} else if(is_left_simple && !is_right_simple)
+	{ //left operand is a clause while right operand is predicate
+		bool has_and = hasANDEDclauses(right);
+		if(has_and == true)
+		{
+			string clause;
+			parseDummyAND(right, clause);
+			putInANDORMap(clause, left);
+			return ("#"+clause);
+		} else {
+			bool has_or = hasOREDclauses(right);
+			if(has_or == true)
+			{
+				string clause;
+				parseDummyOR(right, clause);
+				putSinglePredicateInOrMap(left, s_no);
+			}
+		}
+	}
+
+	return "";
+}
+
+//this is distributing OR over AND
+void putORClauseInANDMap(string right, string clause)
+{
+	//multimap<int, vector<int>>::iterator iter = and_map.find(stoi(clause));
+	//if(iter != and_map.end())
+	//{
+	//	//inserting something for the first time in the OR map corresponding to this sentence
+	//	vector<int> clauses;
+	//	clauses.push_back(stoi(left));
+	//	clauses.push_back(stoi(right));
+	//	and_map.insert(pair<int, vector<int>>(and_index,clauses));
+	//} else {
+	//	cout << "SHOULD NEVER HAPPEN!!! INSIDE putORClauseInANDMap function!!! " << endl;
+	//}
+
+}
+//handle the case when we have AND operator in the expression
+string handleANDCase(string substr, int s_no, string & sentence)
+{
+	string left = "";
+	string right = "";
+	//this function will split the AND sentence into left and right operand
+	parseAND(substr, left, right);
+	bool is_left_simple = checkSimplified(left);
+	bool is_right_simple = checkSimplified(right);
+
+	if(is_left_simple && is_right_simple)//this is the simplest case
+	{
+		putInANDMap(left,right);
+		//this function replaces the processed part with the key from the OR map which is basically sentence number
+		return "";
+	} else if(!is_left_simple && is_right_simple)//this is the simplest case
+	{
+		bool has_and = hasANDEDclauses(left);
+		if(has_and == true)
+		{
+			string clause;
+			parseDummyAND(left, clause);
+			//this function will store ANDed predicate in it's right place in the AND map
+			putClauseInANDMap(right, stoi(clause));
+			////this function replaces the processed part with the key from the OR map which is basically sentence number
+			return clause;
+		} else {
+			bool has_or = hasOREDclauses(left);
+			if(has_or == true)
+			{
+				//this portion is complex will have to think about it
+				string clause;
+				parseDummyOR(left, clause);
+				putTwoANDClausesInORMap(clause, right);
+				return "^"+to_string((long long)global_sno);
+				//putSinglePredicateInOrMap(right, s_no);
+				////this function replaces the processed part with the key from the OR map which is basically sentence number
+				////sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)s_no));
+			}
+			//return "";
+		}
+	
+	} else if(is_left_simple && !is_right_simple)//this is the simplest case
+	{
+		bool has_and = hasANDEDclauses(right);
+		if(has_and == true)
+		{
+			string clause;
+			parseDummyAND(right, clause);
+			//this function will store ANDed predicate in it's right place in the AND map
+			putClauseInANDMap(left, stoi(clause));
+			////this function replaces the processed part with the key from the OR map which is basically sentence number
+			return clause;
+			//sentence.replace(index.start, index.end - index.start + 1, "@"+clause);
+		} else {
+			bool has_or = hasOREDclauses(right);
+			if(has_or == true)
+			{
+				//this portion is complex will have to think about it
+				string clause;
+				parseDummyOR(right, clause);
+				putTwoANDClausesInORMap(clause, left);
+				return "^"+to_string((long long)global_sno);
+				//putSinglePredicateInOrMap(right, s_no);
+				////this function replaces the processed part with the key from the OR map which is basically sentence number
+				////sentence.replace(index.start, index.end - index.start + 1, "^"+to_string((long long)s_no));
+			}
+			//return "";
+		}
+	}
+}
+
+//this will handle the case when we have ORed clause in left and 
+//simple clause in right of ANDed sentence
+void putTwoANDClausesInORMap(string clause, string right)
+{
+	vector<int> temp;
+	temp.push_back(stoi(right));
+	global_sno++;
+	or_map.insert(pair<int, vector<int>>(global_sno, temp));
+}
+//this function will perform the factoring on a single clause so that we don't end up with infinite loops
+bool clauseContainsPredicate(Predicate p2, vector<int> clause, map<string, InputParameter>& var_mapping)
+{
+	//loop over one predicate at a time
+	for(int i = 0; i < (int)clause.size(); i++)
+	{
+		map<int, Predicate>::iterator pitr = predicate_map.find(clause[i]);
+	
+		if(pitr == predicate_map.end())
+		{
+			cout << "SHOULD NEVER HAPPEN. THIS WOULD IMPLY THAT OR HAS SOME KEYS THAT ARE  NOT PRESENT IN PREDICATE MAP!!!!" << endl;
+			continue;
+		}else 
+		{
+			Predicate p1 = pitr->second;
+			if((p1.name == p2.name) && (p1.state==p2.state))
+			{
+				bool result = arePredicatesSame(p1, p2);
+				if(result == true)
+				{
+					unify(p2,p1,var_mapping);
+					//cout <<endl<<"%%%%%%%%%%%%%%%%%%%%%%%%%%YIPEEEEEEEEEEEE%%%%%%%%%%%%%%%%%%%%%%%%%"<< endl;
+					//printPredicate(p1);
+					//cout << endl;
+					//printPredicate(p2);
+					//cout << endl;
+					//cout <<"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"<< endl;
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}

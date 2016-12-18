@@ -1,0 +1,913 @@
+//this is the submitted version
+//just have to remove the issue of duplicates
+//implemented node duplicate removal code
+//has to test it
+
+//the below three are for checking memory leaks
+//#define _CRTDBG_MAP_ALLOC
+//#include <stdlib.h>
+//#include <crtdbg.h>
+//for measuring time
+#include <ctime>
+
+#include <fstream>
+#include <vector>
+#include <iostream>
+#include <string>
+#include <algorithm>
+#include <climits>
+
+using namespace std;
+
+//renaming the 2D vectors, will make the life much easier later on
+typedef vector< vector<int> > Int2DArray;
+typedef vector< vector<char> > Char2DArray;
+
+
+int TOTAL_COUNT = 0;
+//node in a tree
+struct Node {
+	int row;
+	int col;
+	int score;
+	Char2DArray current_board;
+	char type_of_move;
+};
+
+struct find_in_vector {
+    find_in_vector(const Char2DArray & input) : board(input) {}
+    bool operator()(const Node* const & n) {
+		return n->current_board == board;
+    }
+private:
+    Char2DArray board;
+};
+
+struct SortAscending
+{
+	 bool operator () ( const Node* a, const Node* b ) const 
+    {
+		if(a->type_of_move > b->type_of_move)
+			return true;
+		else if(a->type_of_move < b->type_of_move)
+			return false;
+		else if(a->type_of_move == b->type_of_move)
+		{
+			if(a->score < b->score)
+			{
+				return true;
+			} else
+				return false;
+		}
+		cout << "Code should never reach this statement!!!" << endl;
+		cout << "Writing the line below it to get rid of the warning!!!" << endl;
+		return false;
+    }
+};
+
+struct SortDescending
+{
+	 bool operator () ( const Node* a, const Node* b ) const 
+    {
+		if(a->type_of_move > b->type_of_move)
+			return true;
+		else if(a->type_of_move < b->type_of_move)
+			return false;
+		else if(a->type_of_move == b->type_of_move)
+		{
+			if(a->score > b->score)
+			{
+				return true;
+			} else
+				return false;
+		}
+		cout << "Code should never reach this statement!!!" << endl;
+		cout << "Writing the line below it to get rid of the warning!!!" << endl;
+		return false;
+    }
+};
+//char MY_SYMBOL = '\0';
+//this will write the final output to the output.txt file
+void writeOutputToFile(Node best_move);
+
+//this will tell us whether the board is full or not. Basically game has ended
+bool isBoardFull(Char2DArray& board_symbols);
+
+//for implementing MINIMAX algo
+Node MINIMAX(char my_symbol, char enemy_symbol, Int2DArray& board_values, Char2DArray board_symbols);
+//will now make the move from min player perspective
+int MIN_VALUE(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth);
+//will now make the move from max player perspective
+int MAX_VALUE(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth);
+
+//for implementing ALPHA-BETA PRUNING algo
+Node ALPHA_BETA_SEARCH(char my_symbol, char enemy_symbol, Int2DArray& board_values, Char2DArray board_symbols);
+//will now make the move from min player perspective
+int MIN_VALUE_AB(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth, int alpha, int beta);
+//will now make the move from max player perspective
+int MAX_VALUE_AB(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth, int alpha, int beta);
+
+//this will find out the utility score of the board from the perspective of the current player 
+int calculateUtility(Char2DArray& board_symbols, Int2DArray& board_values, char my_symbol);
+
+//given the current state of the board and the symbol for current player,
+//it will store all possible states in the moves vector
+//void createAllPossibleMoves(vector<Node*>& moves, const Char2DArray& board_symbols, char my_symbol, int depth);
+void createAllPossibleMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth);
+//given the current state of the board and the symbol for current player,
+//it will store all possible stake moves in the moves vector
+//void createAllStakeMoves(vector<Node*>& moves, const Char2DArray& board_symbols, char my_symbol, int depth);
+void createAllStakeMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth);
+//given the current state of the board and the symbol for current player,
+//it will store all possible RAID moves in the moves vector
+//void createAllRaidMoves(vector<Node*>& moves, const Char2DArray& board_symbols, char my_symbol, int depth);
+void createAllRaidMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth);
+//this function checks whether we can do the RAID move on the location [i,j]
+//bool isRaidPossible(int i, int j, const Char2DArray& board_symbols, char my_symbol);
+
+//this function will check whether the location (i,j)has the 
+//neighbor with the desired symbol or not
+//this will help us in checking whether we can apply raid or not
+bool hasNeighbor(int i, int j, const Char2DArray& board_symbols, char symbol);
+
+//this function will actually apply the RAID move on location i,j
+void applyRaidMove(int i, int j, Char2DArray& board_symbols, char my_symbol);
+//this will print all the boards in the moves vector
+void printAllBoards(vector<Node*>& moves);
+//print just a single board
+void printBoard(const Char2DArray& board_symbols);
+
+//this function deletes the dynamic memory used for creating new boards
+void freeMemoryForMoves(vector<Node*> moves);
+
+
+//creating a GLOBAL board size variable so that I don't have to send the variable board size inside every function
+int BOARD_SIZE = 0;
+//creating a GLOBAL depth variable so that I don't have to send it in each function
+int DEPTH = 0;
+
+//start the clock
+clock_t begin1 = clock();
+	
+int main()
+{
+	
+	//descending for max vertex
+	//ascending for min vertex
+	//opening the file for reading data
+	ifstream inFile("input.txt");
+	//checking that the file indeed opened
+	if(inFile.is_open())
+	{
+		string algo;        //will tell us which algorithm to use
+		char my_symbol = '\0';	//for storing the symbol for my player
+		char enemy_symbol = '\0';	//for storing the symbol of enemy player
+		int depth = 0;
+		int time_left = 0;
+
+		//input the board size from the input.txt
+		inFile>>BOARD_SIZE;
+		cout << "Board Size: " << BOARD_SIZE << endl;
+
+		//this is check for valid board size
+		if(BOARD_SIZE < 1 || BOARD_SIZE > 26)
+		{
+			cout <<"Board size not possible!!!" << endl;
+			cout <<"Valid range is 1 - 26" << endl;
+			return -1;
+		}
+
+		inFile>> algo;
+		cout << "Algorithm: " << algo << endl;
+
+		inFile>>my_symbol;
+		enemy_symbol = (my_symbol == 'O')? 'X' : 'O';
+
+		//MY_SYMBOL = my_symbol;
+		cout << "My Symbol: " << my_symbol << endl;
+		cout << "Enemy Symbol: " << enemy_symbol << endl;
+
+		inFile >> DEPTH;
+		cout << "Depth of the Move: " << DEPTH << endl;
+
+		//creating a 2D int array to store the values on each cell of the board
+		vector< vector<int> > board_values(BOARD_SIZE, vector<int>(BOARD_SIZE));
+
+		//cout << "*************Printing Board Values*************" << endl;
+		//taking input the board values from the file
+		for(int i = 0; i < BOARD_SIZE; i++)
+		{
+			for(int j = 0; j < BOARD_SIZE; j++)
+			{
+				
+				inFile>>board_values[i][j];
+				cout<<board_values[i][j] << " ";
+			}
+			cout << endl;
+		}
+
+		//creating a 2D char array to store the symbols on each cell of the board
+		//Char2DArray board_symbols(BOARD_SIZE,BOARD_SIZE);
+        vector< vector<char> > board_symbols(BOARD_SIZE, vector<char>(BOARD_SIZE));
+
+		//cout << "*************Printing Board Symbols*************" << endl;
+		//taking input the board values from the file
+		for(int i = 0; i < BOARD_SIZE; i++)
+		{
+			for(int j = 0; j < BOARD_SIZE; j++)
+			{
+				inFile>>board_symbols[i][j];
+				cout<<board_symbols[i][j] << " ";
+			}
+			cout << endl;
+		}
+
+		//closing the file as we don't need it anymore
+		inFile.close();
+		Node best_move;
+		if(algo == "MINIMAX")
+		{
+			best_move = MINIMAX(my_symbol, enemy_symbol, board_values, board_symbols);
+			//cout << "Type of Move: " << best_move.type_of_move << endl;
+			//cout << "Location of MOve: " << (char)(best_move.col +65) << (best_move.row + 1) << endl;
+			//cout << "Board Configuration after the move is: " << endl;
+			//cout << "#############################################" << endl;
+			//printBoard(best_move.current_board);
+		} //end of MINIMAX algo
+		else if(algo == "ALPHABETA")
+		{
+			best_move = ALPHA_BETA_SEARCH(my_symbol, enemy_symbol, board_values, board_symbols);
+			//cout << "Type of Move: " << best_move.type_of_move << endl;
+			//cout << "Location of MOve: "<< (char)(best_move.col +65) << (best_move.row + 1) << endl;
+			//cout << "Board Configuration after the move is: " << endl;
+			//cout << "#############################################" << endl;
+			//printBoard(best_move.current_board);
+		} //end of ALPHABETA algo
+
+		writeOutputToFile(best_move);
+		//clearing memory for board symbol
+		board_symbols.clear();
+		board_symbols.shrink_to_fit();
+		board_values.clear();
+		board_values.shrink_to_fit();
+
+	} else {
+		cout << "File could not be opened!!!" << endl;
+	}
+
+	//clearing memory for board values
+	
+	//for checking memory leaks in a program
+	//_CrtDumpMemoryLeaks();
+	
+	//stop the clock
+	//clock_t end = clock();
+	//measure the time elasped
+	//double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+	//cout << "Execution Time of Program: " << elapsed_secs << " secs." << endl;
+	cout << "Total Function Calls: " << TOTAL_COUNT << endl;
+	return 0;
+} //end of main bracket
+
+void writeOutputToFile(Node best_move)
+{
+	ofstream outFile("output.txt");
+
+	if(outFile.is_open())
+	{
+		outFile << (char)(best_move.col +65) << (best_move.row + 1);
+		if(best_move.type_of_move == 'S')
+			outFile << " Stake" << endl;
+		else
+			outFile << " Raid" << endl;
+
+		for(int i = 0; i < BOARD_SIZE; i++)
+		{
+			for(int j = 0; j < BOARD_SIZE; j++)
+			{
+				outFile << best_move.current_board[i][j];
+			}
+			outFile << endl;
+		}
+		outFile.close();
+	} else {
+		cout << "Output file could not be opened!!!!" << endl;
+		cout << "SHOULD NEVER HAPPEN!!!!" << endl;
+	}
+}
+
+
+//Implementation of ALPHA-BETA PRUNING as given in the book
+Node ALPHA_BETA_SEARCH(char my_symbol, char enemy_symbol, Int2DArray& board_values, Char2DArray board_symbols)
+{
+	//this will tell us whether it is the turn for max or min
+	//max = 1 implies it is turn for max, while max = 0 implies it is turn for min
+	//char max = 1;
+	int score = INT_MIN;
+	int depth = 0;
+	Node best_move;
+	int alpha = INT_MIN;
+	int beta = INT_MAX;
+	vector<Node*> moves;
+
+	createAllPossibleMoves(moves, board_symbols, board_values, my_symbol, my_symbol, depth + 1);
+	//sort(moves.begin(), moves.end(), SortDescending());
+	//taking each possible move and giving it to MIN Function
+	for(int i = 0; i < (int)moves.size(); i++)
+	{
+		int temp_score = MIN_VALUE_AB(moves[i]->current_board, board_values, enemy_symbol, my_symbol, depth + 1, alpha, beta);
+		if(temp_score > score)
+		{
+			score = temp_score;
+			best_move.col = moves[i]->col;
+			best_move.row = moves[i]->row;
+			best_move.current_board = moves[i]->current_board;
+			best_move.type_of_move = moves[i]->type_of_move;
+		}
+	}
+	
+	//cout << "Best possible score is: " << score << endl;
+	freeMemoryForMoves(moves);
+
+	return best_move;
+	
+}
+
+//Max function for a-b pruning
+int MAX_VALUE_AB(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth, int alpha, int beta)
+{
+	TOTAL_COUNT++;
+	//if(TOTAL_COUNT % 100000 == 0)
+	//{
+	//	clock_t end = clock();
+	//	//measure the time elasped
+	//	cout << TOTAL_COUNT << endl;
+	//
+	//	double elapsed_secs = double(end - begin1) / CLOCKS_PER_SEC;
+	//	cout << "Execution Time of Program: " << elapsed_secs << " secs." << endl;
+	//
+	//}
+	//either the board is full or we have reached cut-off depth
+	if((depth == DEPTH || isBoardFull(current_board) == true))
+	{
+		//returnt the utility value of the board
+		return calculateUtility(current_board, board_values, initial_symbol);
+	} else {
+		int score = INT_MIN;
+		vector<Node*> moves;
+		createAllPossibleMoves(moves, current_board, board_values, initial_symbol, current_symbol, depth + 1);
+		//sort(moves.begin(), moves.end(), SortDescending());
+	
+		char enemy_symbol = '\0';
+		if(current_symbol == 'O')
+			enemy_symbol = 'X';
+		else
+			enemy_symbol = 'O';
+		
+		for(int i = 0; i < (int)moves.size(); i++)
+		{
+			int temp_score = MIN_VALUE_AB(moves[i]->current_board, board_values, enemy_symbol, initial_symbol, depth + 1, alpha, beta);
+			if(temp_score > score)
+			{
+				score = temp_score;
+			}
+
+			if(score >= beta)
+			{
+				freeMemoryForMoves(moves);
+				return score;
+			}
+
+			alpha = (alpha > score)? alpha: score;
+		}
+		freeMemoryForMoves(moves);
+		return score;
+	}//end of else
+}
+//Min function for a-b pruning
+int MIN_VALUE_AB(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth, int alpha, int beta)
+{
+	TOTAL_COUNT++;
+	//if(TOTAL_COUNT % 100000 == 0)
+	//{
+	//	clock_t end = clock();
+	//	//measure the time elasped
+	//	cout << TOTAL_COUNT << endl;
+	//
+	//	double elapsed_secs = double(end - begin1) / CLOCKS_PER_SEC;
+	//	cout << "Execution Time of Program: " << elapsed_secs << " secs." << endl;
+	//
+	//}
+	//either the board is full or we have reached cut-off depth
+	if((depth == DEPTH || isBoardFull(current_board) == true))
+	{
+		//returnt the utility value of the board
+		return calculateUtility(current_board, board_values, initial_symbol);
+	} else {
+		int score = INT_MAX;
+		vector<Node*> moves;
+		createAllPossibleMoves(moves, current_board, board_values, initial_symbol, current_symbol, depth + 1);
+		//sort(moves.begin(), moves.end(), SortAscending());
+	
+		char enemy_symbol = '\0';
+		if(current_symbol == 'O')
+			enemy_symbol = 'X';
+		else
+			enemy_symbol = 'O';
+		
+		for(int i = 0; i < (int)moves.size(); i++)
+		{
+			int temp_score = MAX_VALUE_AB(moves[i]->current_board, board_values, enemy_symbol, initial_symbol, depth + 1,alpha, beta);
+
+			if(temp_score < score)
+			{
+				score = temp_score;
+			}
+
+			if(score <= alpha)
+			{
+				freeMemoryForMoves(moves);
+				return score;
+			}
+
+			beta = (beta < score)? beta: score;
+		}
+		freeMemoryForMoves(moves);
+		return score;
+	}//end of else
+
+}//end of MIN function
+
+//implementation of MINIMAX Algorithm as given in the book
+Node MINIMAX(char my_symbol, char enemy_symbol, Int2DArray& board_values, Char2DArray board_symbols)
+{
+	int score = INT_MIN;
+	int depth = 0;
+	Node best_move;
+	vector<Node*> moves;
+
+	createAllPossibleMoves(moves, board_symbols, board_values, my_symbol, my_symbol, depth + 1);
+	
+	//taking each possible move and giving it to MIN Function
+	for(int i = 0; i < (int)moves.size(); i++)
+	{
+		int temp_score = MIN_VALUE(moves[i]->current_board, board_values, enemy_symbol, my_symbol, depth + 1);
+		if(temp_score > score)
+		{
+			score = temp_score;
+			best_move.col = moves[i]->col;
+			best_move.row = moves[i]->row;
+			best_move.current_board = moves[i]->current_board;
+			best_move.type_of_move = moves[i]->type_of_move;
+		}
+	}
+	
+	//cout << "Best possible score is: " << score << endl;
+	freeMemoryForMoves(moves);
+
+	return best_move;	
+}
+
+//will now make the move from min player perspective
+int MIN_VALUE(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth)
+{
+	TOTAL_COUNT++;
+	//either the board is full or we have reached cut-off depth
+	if((depth == DEPTH || isBoardFull(current_board) == true))
+	{
+		//returnt the utility value of the board
+		return calculateUtility(current_board, board_values, initial_symbol);
+	} else {
+		int score = INT_MAX;
+		vector<Node*> moves;
+		createAllPossibleMoves(moves, current_board, board_values, initial_symbol, current_symbol, depth + 1);
+		
+		char enemy_symbol = '\0';
+		if(current_symbol == 'O')
+			enemy_symbol = 'X';
+		else
+			enemy_symbol = 'O';
+		
+		for(int i = 0; i < (int)moves.size(); i++)
+		{
+			int temp_score = MAX_VALUE(moves[i]->current_board, board_values, enemy_symbol, initial_symbol, depth + 1);
+			if(temp_score < score)
+			{
+				score = temp_score;
+			}
+		}
+		freeMemoryForMoves(moves);
+		return score;
+	}//end of else
+
+}//end of MIN function
+
+//will now make the move from max player perspective
+int MAX_VALUE(Char2DArray & current_board, Int2DArray& board_values, char current_symbol, char initial_symbol, int depth)
+{
+	TOTAL_COUNT++;
+	//either the board is full or we have reached cut-off depth
+	if((depth == DEPTH || isBoardFull(current_board) == true))
+	{
+		cout << "Count so far: " <<TOTAL_COUNT << endl;
+		//returnt the utility value of the board
+		return calculateUtility(current_board, board_values,initial_symbol);
+	} else {
+		int score = INT_MIN;
+		vector<Node*> moves;
+		createAllPossibleMoves(moves, current_board, board_values, initial_symbol, current_symbol, depth + 1);
+		
+		char enemy_symbol = '\0';
+		if(current_symbol == 'O')
+			enemy_symbol = 'X';
+		else
+			enemy_symbol = 'O';
+		
+		for(int i = 0; i < (int)moves.size(); i++)
+		{
+			int temp_score = MIN_VALUE(moves[i]->current_board, board_values, enemy_symbol, initial_symbol, depth + 1);
+			if(temp_score > score)
+			{
+				score = temp_score;
+			}
+		}
+		freeMemoryForMoves(moves);
+		return score;
+	}//end of else
+}//end of MAX function
+
+//this function deletes the dynamic memory used for creating new boards
+void freeMemoryForMoves(vector<Node*> moves)
+{
+	for(int i = 0; i < (int)moves.size(); i++)
+	{
+		delete moves[i];
+	}
+}
+
+//given the current state of the board and the symbol for current player,
+//it will store all possible states in the moves vector
+void createAllPossibleMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth)
+{
+	createAllStakeMoves(moves, board_symbols, board_values, initial_symbol, my_symbol, depth);
+	//cout << "Number of Possible Stake Moves on level " << depth << " are " << moves.size() << endl;
+	//cout << "Printing All Stake Moves on Level " << depth << endl;
+	//cout << "#################################################" << endl;
+	int stake_moves = (int)moves.size();
+	
+	createAllRaidMoves(moves, board_symbols, board_values, initial_symbol, my_symbol, depth);
+	//cout << "Number of Possible Raid Moves on level " << depth << " are " << abs(stake_moves - (int)moves.size()) << endl;
+	//cout << "Printing All Stake Moves on Level " << depth << endl;
+	//cout << "#################################################" << endl;
+	
+	//printAllBoards(moves);
+}
+
+void createAllRaidMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth)
+{
+	char enemy_symbol = (my_symbol == 'O')? 'X' : 'O';
+	for(int i = 0; i < BOARD_SIZE; i++)
+	{
+		for(int j = 0; j < BOARD_SIZE; j++)
+		{
+			//check only if there is empty slot on the location [i,j]
+			//if it is occupied then obviously we can't do a raid
+			if(board_symbols[i][j] == '.') 
+			{
+				if(hasNeighbor(i, j, board_symbols, my_symbol) && hasNeighbor(i, j, board_symbols, enemy_symbol))
+				{
+					//Char2DArray new_board(BOARD_SIZE,BOARD_SIZE);
+                    //vector< vector<char> > new_board(BOARD_SIZE, vector<char>(BOARD_SIZE));
+					//new_board = board_symbols;
+					//new_board[i][j] = my_symbol;
+					Node* temp = new Node;
+					temp->current_board = board_symbols;
+						
+					applyRaidMove(i, j, temp->current_board, my_symbol);
+
+					//vector<Node* >::iterator result = std::find_if(moves.begin(), moves.end(), find_in_vector(new_board));
+					//if(result == moves.end()) {
+					temp->row = i;
+					temp->col = j;
+					temp->type_of_move = 'R'; //R denotes raid
+					temp->score = calculateUtility(temp->current_board, board_values, initial_symbol);
+					moves.push_back(temp);
+					//}
+				}
+				
+			}
+		}
+	}
+}
+
+////this function checks whether we can do the RAID move on the location [i,j]
+//bool isRaidPossible(int i, int j, const Char2DArray& board_symbols, char my_symbol)
+//{
+//	//same symbol is on top of the current location
+//	if((i > 0) && (board_symbols[i-1][j] == my_symbol))
+//		return true;
+//	//same symbol is on bottom of the current location
+//	if(((i+1) < BOARD_SIZE) && (board_symbols[i+1][j] == my_symbol))
+//		return true;
+//	//same symbol is on left of the current location
+//	if((j > 0) && (board_symbols[i][j-1] == my_symbol))
+//		return true;
+//	//same symbol is on right of the current location
+//	if(((j+1) < BOARD_SIZE) && (board_symbols[i][j+1] == my_symbol))
+//		return true;
+//
+//	return false;
+//}
+
+//this function will check whether the location (i,j)has the 
+//neighbor with the desired symbol or not
+//this will help us in checking whether we can apply raid or not
+bool hasNeighbor(int i, int j, const Char2DArray& board_symbols, char symbol)
+{
+	//same symbol is on top of the current location
+	if((i > 0) && (board_symbols[i-1][j] == symbol))
+		return true;
+	//same symbol is on bottom of the current location
+	if(((i+1) < BOARD_SIZE) && (board_symbols[i+1][j] == symbol))
+		return true;
+	//same symbol is on left of the current location
+	if((j > 0) && (board_symbols[i][j-1] == symbol))
+		return true;
+	//same symbol is on right of the current location
+	if(((j+1) < BOARD_SIZE) && (board_symbols[i][j+1] == symbol))
+		return true;
+
+	return false;
+}
+//print just a single board
+void printBoard(const Char2DArray& board_symbols)
+{
+	for(int i = 0; i < BOARD_SIZE; i++)
+	{
+		for(int j = 0; j < BOARD_SIZE; j++)
+		{
+			cout << board_symbols[i][j] << " ";
+		}
+		cout << endl;
+	}
+}
+//this function will actually apply the RAID move on location i,j
+void applyRaidMove(int i, int j, Char2DArray& board_symbols, char my_symbol)
+{
+	//enemy symbol is on top of the current location
+	if((i > 0) && (board_symbols[i-1][j] != my_symbol) && (board_symbols[i-1][j] != '.'))
+	{
+		board_symbols[i-1][j] = my_symbol;
+	}
+	//enemy symbol is on bottom of the current location
+	if(((i+1) < BOARD_SIZE) && (board_symbols[i+1][j] != my_symbol)  && (board_symbols[i+1][j] != '.'))
+	{
+		 board_symbols[i+1][j] = my_symbol;
+	}
+	//enemy symbol is on left of the current location
+	if((j > 0) && (board_symbols[i][j-1] != my_symbol)  && (board_symbols[i][j-1] != '.'))
+	{
+		 board_symbols[i][j-1] = my_symbol;
+	}
+	//enemy symbol is on right of the current location
+	if(((j+1) < BOARD_SIZE) && (board_symbols[i][j+1] != my_symbol)  && (board_symbols[i][j+1] != '.'))
+	{
+		 board_symbols[i][j+1] = my_symbol;
+	}
+}
+
+
+//given the current state of the board and the symbol for current player,
+//it will store all possible stake moves in the moves vector
+void createAllStakeMoves(vector<Node*>& moves, const Char2DArray& board_symbols, Int2DArray & board_values, char initial_symbol, char my_symbol, int depth)
+{
+	for(int i = 0; i < BOARD_SIZE; i++)
+	{
+		for(int j = 0; j < BOARD_SIZE; j++)
+		{
+			//check only if there is empty slot on the location [i,j]
+			//if it is occupied then obviously we can't do a stake
+			if(board_symbols[i][j] == '.') 
+			{
+				Node* temp = new Node;
+				//Char2DArray new_board(BOARD_SIZE,BOARD_SIZE);
+				//vector< vector<char> > new_board(BOARD_SIZE, vector<char>(BOARD_SIZE));
+                //new_board = board_symbols;
+				temp->current_board = board_symbols;
+				temp->current_board[i][j] = my_symbol;
+				//temp->current_board = new_board;
+				temp->type_of_move = 'S'; //S denotes STAKE
+				temp->row = i;
+				temp->col = j;
+				temp->score = calculateUtility(temp->current_board, board_values, initial_symbol);
+				moves.push_back(temp);
+			}
+		}
+	}
+}
+
+//this will print all the boards in the moves vector
+void printAllBoards(vector<Node*>& moves)
+{
+	vector<Node*>::iterator itr = moves.begin();
+
+	for(; itr != moves.end(); itr++)
+	{
+		//Char2DArray temp(BOARD_SIZE,BOARD_SIZE);
+        vector< vector<char> > temp(BOARD_SIZE, vector<char>(BOARD_SIZE));
+		temp = (*itr)->current_board;
+		for(int i = 0; i < BOARD_SIZE; i++)
+		{
+			for(int j = 0; j < BOARD_SIZE; j++)
+			{
+				cout << temp[i][j] << " ";
+			}
+			cout << endl;
+		}
+		cout<< "---------------------------------------------------------------" << endl;
+	}
+	
+}
+
+
+//this will tell us whether the board is full or not. Basically game has ended
+bool isBoardFull(Char2DArray& board_symbols)
+{
+	for(int i = 0; i < BOARD_SIZE; i++)
+	{
+		for(int j = 0; j < BOARD_SIZE; j++)
+		{
+			if(board_symbols[i][j] == '.')
+				return false;
+		}
+	}
+
+	return true;
+}
+
+//this will find out the utility score of the board from the perspective of the current player 
+int calculateUtility(Char2DArray& board_symbols, Int2DArray& board_values, char my_symbol)
+{
+	char enemy_symbol = 'O';
+	if(my_symbol == 'X')
+		enemy_symbol = 'O';
+	else
+		enemy_symbol = 'X';
+
+	int my_score = 0;
+	int enemy_score = 0;
+
+	for(int i = 0; i < BOARD_SIZE; i++)
+	{
+		for(int j = 0; j < BOARD_SIZE; j++)
+		{
+			if(board_symbols[i][j] == my_symbol)
+				my_score += board_values[i][j];
+			else if(board_symbols[i][j] == enemy_symbol)
+				enemy_score += board_values[i][j];
+		}
+	}
+
+	return (my_score - enemy_score);
+}
+
+Problem        : The Bedlam in the Pantry
+Language       : C++
+Compiled Using : g++
+Version        : GCC 4.9.1
+Input for your program will be provided from STDIN
+Print out all output from your program to STDOUT
+
+#include <iostream>
+#include <string>
+#include <algorithm>
+#include <vector>
+#include <fstream>
+#include <climits> 
+#include <stack>
+
+using namespace std;
+
+struct Location{
+  int r;
+  int c;
+  int depth;
+};
+
+int main() {
+    int row = 0;
+    int col = 0;
+
+	ifstream inFile("input10.txt");
+    //cin >> row >> col;
+	inFile >> row >> col;
+    Location l;
+    //vector< vector<char> > v(row,col);
+    vector< vector<char> > v(row, vector<char>(col));
+
+    for(int i = 0; i < row; i++)
+    {
+        for(int j = 0; j < col; j++)
+        {
+            //cin>>v[i][j];
+			inFile>>v[i][j];
+            if(v[i][j] == '*')
+            {
+               l.r = i;
+               l.c = j;
+               l.depth = 0;
+            }
+            cout << v[i][j];
+        }
+        cout << endl;
+    }
+    
+    stack<Location> s;
+    s.push(l);
+	bool flag = false;
+    while(!s.empty())
+    {
+        Location current = s.top();
+        s.pop();
+        
+        if(v[current.r][current.c] == 'S')
+        {
+            cout << current.depth + 1<< endl;
+			flag = true;
+            break;
+        } else {
+        
+
+
+        if(current.r > 0 && (v[current.r - 1][current.c] == '.' || v[current.r - 1][current.c] == 'S'))
+        {
+			if(v[current.r - 1][current.c] == 'S')
+			{
+				cout << current.depth + 1<< endl;
+				flag = true;
+				break;
+			}
+            Location temp;
+            temp.r = current.r - 1;
+            temp.c = current.c;
+            temp.depth = current.depth + 1;
+			v[current.r - 1][current.c] = 'V';    
+            s.push(temp);
+        }
+        
+        if(current.r + 1 < row  &&  (v[current.r + 1][current.c] == '.'  || v[current.r + 1][current.c] == 'S'))
+        {
+			if(v[current.r + 1][current.c] == 'S')
+			{
+				cout << current.depth + 1<< endl;
+				flag = true;
+				break;
+			}
+            Location temp;
+            temp.r = current.r + 1;
+            temp.c = current.c;
+            temp.depth = current.depth + 1;
+            v[current.r + 1][current.c] = 'V';
+            s.push(temp);
+        }
+        
+        if(current.c > 0  && (v[current.r][current.c - 1] == '.' || v[current.r][current.c-1] == 'S'))
+        {
+			if(v[current.r][current.c-1] == 'S')
+			{
+				cout << current.depth + 1<< endl;
+				flag = true;
+				break;
+			}
+            Location temp;
+            temp.r = current.r;
+            temp.c = current.c - 1;
+            temp.depth = current.depth + 1;
+            v[current.r][current.c - 1] = 'V';
+            s.push(temp);
+        }
+        
+        if(current.c + 1 < col  && (v[current.r][current.c + 1] == '.'  || v[current.r][current.c+1] == 'S'))
+        {
+			if(v[current.r][current.c+1] == 'S')
+			{
+				cout << current.depth + 1<< endl;
+				flag = true;
+				break;
+			}
+            Location temp;
+            temp.r = current.r;
+            temp.c = current.c + 1;
+            temp.depth = current.depth + 1;
+            v[current.r][current.c + 1] = 'V';
+            s.push(temp);
+        }
+        }
+    }
+    
+	if(flag == false)
+	{
+		cout << -1 << endl;
+	}
+    return 0;
+}
